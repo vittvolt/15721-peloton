@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "catalog/schema.h"
+#include "catalog/constraint.h"
 
 #include <algorithm>
 #include <iostream>
@@ -52,8 +53,10 @@ void Schema::CreateTupleSchema(
   uninlined_column_count = uninlined_columns.size();
 }
 
-// Construct schema from vector of Column
-Schema::Schema(const std::vector<Column> &columns)
+// Construct schema from vector of Column and vector of Constraint
+// N.B. that the indices of the columns and their ids in Constraints must match.
+Schema::Schema(const std::vector<Column> &columns, 
+               const std::vector<Constraint> &constraints)
     : length(0), tuple_is_inlined(false) {
   oid_t column_count = columns.size();
 
@@ -77,10 +80,7 @@ Schema::Schema(const std::vector<Column> &columns)
   CreateTupleSchema(column_types, column_lengths, column_names, is_inlined);
 
   // Add constraints
-  for (oid_t column_itr = 0; column_itr < column_count; column_itr++) {
-    for (auto constraint : columns[column_itr].GetConstraints())
-      AddConstraint(column_itr, constraint);
-  }
+  constraints = constraints;
 }
 
 // Copy schema

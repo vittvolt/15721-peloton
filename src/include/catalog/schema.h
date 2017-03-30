@@ -14,6 +14,7 @@
 
 #include <memory>
 #include "catalog/column.h"
+#include "catalog/constraint.h"
 #include "common/printable.h"
 #include "type/type.h"
 #include "boost/algorithm/string.hpp"
@@ -37,8 +38,9 @@ class Schema : public Printable {
                          const std::vector<std::string> &column_names,
                          const std::vector<bool> &is_inlined);
 
-  // Construct schema from vector of Column
-  Schema(const std::vector<Column> &columns);
+  // Construct schema from vector of Column and a vector on Constraint
+  Schema(const std::vector<Column> &columns, 
+      const std::vector<Constraint> &constraints);
 
   // Copy schema
   static std::shared_ptr<const Schema> CopySchema(
@@ -163,6 +165,7 @@ class Schema : public Printable {
     return indexed_columns_;
   }
 
+  //TODO: Delete this function
   // Get the nullability of the column at a given index.
   inline bool AllowNull(const oid_t column_id) const {
     for (auto constraint : columns[column_id].GetConstraints()) {
@@ -171,21 +174,16 @@ class Schema : public Printable {
     return true;
   }
 
-  // Add constraint for column by id
-  inline void AddConstraint(oid_t column_id,
-                            const catalog::Constraint &constraint) {
-    columns[column_id].AddConstraint(constraint);
-  }
-
-  // Add constraint for column by name
-  inline void AddConstraint(std::string column_name,
-                            const catalog::Constraint &constraint) {
-    for (size_t column_itr = 0; column_itr < columns.size(); column_itr++) {
-      if (columns[column_itr].GetName() == column_name) {
-        columns[column_itr].AddConstraint(constraint);
-      }
+  // Add an already-made constraint to the schema
+  inline void AddConstraint(const catalog::Constraint &constraint) {
+    constraints.push_back(constraint);
+    if (constraint.GetType() == ConstraintType::PRIMARY) {
+      oid_t column_id = constraint.GetColumnIDs().back();
+      columns[column_id].SetPrimary();
     }
   }
+
+  const std::vector<Constraint> &GetConstraints() const { return constraints; }
 
   // Get a string representation for debugging
   const std::string GetInfo() const;
@@ -210,6 +208,9 @@ class Schema : public Printable {
 
   // keeps track of indexed columns in original table
   std::vector<oid_t> indexed_columns_;
+
+  // Constraints
+  std::vector<Constraint> constraints;
 };
 
 }  // End catalog namespace

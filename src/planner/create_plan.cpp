@@ -38,9 +38,10 @@ CreatePlan::CreatePlan(parser::CreateStatement *parse_tree) {
   table_name = parse_tree->GetTableName();
   database_name = parse_tree->GetDatabaseName();
   std::vector<catalog::Column> columns;
-  std::vector<catalog::Constraint> column_contraints;
+  std::vector<catalog::Constraint> contraints;
   if (parse_tree->type == parse_tree->CreateType::kTable) {
     create_type = CreateType::TABLE;
+    oid_t column_id = 0;
     for (auto col : *parse_tree->columns) {
       type::Type::TypeId val = col->GetValueType(col->type);
 
@@ -48,26 +49,26 @@ CreatePlan::CreatePlan(parser::CreateStatement *parse_tree) {
 
       // Check main constraints
       if (col->primary) {
-        catalog::Constraint constraint(ConstraintType::PRIMARY, "con_primary");
-        column_contraints.push_back(constraint);
+        catalog::Constraint constraint(ConstraintType::PRIMARY, "con_primary",
+            {column_id});
+        contraints.push_back(constraint);
         LOG_TRACE("Added a primary key constraint on column \"%s\"", col->name);
       }
 
       if (col->not_null) {
-        catalog::Constraint constraint(ConstraintType::NOTNULL, "con_not_null");
-        column_contraints.push_back(constraint);
+        catalog::Constraint constraint(ConstraintType::NOTNULL, "con_not_null",
+            {column_id});
+        contraints.push_back(constraint);
       }
 
+      //TODO: need to update schema creation by columns before this works
       auto column = catalog::Column(val, type::Type::GetTypeSize(val),
           std::string(col->name), false);
-      for (auto con : column_contraints) {
-        column.AddConstraint(con);
-      }
 
-      column_contraints.clear();
       columns.push_back(column);
+      column_id++;
     }
-    catalog::Schema *schema = new catalog::Schema(columns);
+    catalog::Schema *schema = new catalog::Schema(columns, constraints);
     table_schema = schema;
   }
   if (parse_tree->type == parse_tree->CreateType::kIndex) {

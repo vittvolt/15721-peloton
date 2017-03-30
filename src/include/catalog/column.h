@@ -60,6 +60,9 @@ class Column : public Printable {
   // Set the appropriate column length
   void SetLength(oid_t column_length);
 
+  // Set this column as the primary key
+  void SetPrimary() { is_primary_ = true; }
+
   oid_t GetOffset() const { return column_offset; }
 
   std::string GetName() const { return column_name; }
@@ -80,16 +83,6 @@ class Column : public Printable {
   inline bool IsInlined() const { return is_inlined; }
 
   inline bool IsPrimary() const { return is_primary_; }
-
-  // Add a constraint to the column
-  void AddConstraint(const catalog::Constraint &constraint) {
-    constraints.push_back(constraint);
-    if (constraint.GetType() == ConstraintType::PRIMARY) {
-      is_primary_ = true;
-    }
-  }
-
-  const std::vector<Constraint> &GetConstraints() const { return constraints; }
 
   // Compare two column objects
   bool operator==(const Column &other) const {
@@ -134,9 +127,6 @@ class Column : public Printable {
 
   // offset of column in tuple
   oid_t column_offset = INVALID_OID;
-
-  // Constraints
-  std::vector<Constraint> constraints;
 };
 
 }  // End catalog namespace

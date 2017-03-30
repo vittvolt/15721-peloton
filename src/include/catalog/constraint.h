@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "common/printable.h"
+#include "type/type.h"
 #include "type/types.h"
 
 namespace peloton {
@@ -28,8 +29,10 @@ namespace catalog {
 
 class Constraint : public Printable {
  public:
-  Constraint(ConstraintType type, std::string constraint_name)
-      : constraint_type(type), constraint_name(constraint_name) {}
+  Constraint(ConstraintType type, std::string constraint_name, 
+             std::vector<oid_t> column_ids)
+      : constraint_type(type), constraint_name(constraint_name),
+        column_ids(column_ids) {}
 
   //===--------------------------------------------------------------------===//
   // ACCESSORS
@@ -43,6 +46,26 @@ class Constraint : public Printable {
   // Offset into the list of "unique indices" in the Table.
   void SetUniqueIndexOffset(oid_t offset) { unique_index_list_offset = offset; }
 
+  // Set default value. Only applies if DEFAULT constraint
+  void SetDefault(type::Value *default_value) {
+    if (constraint_type == ConstraintType::DEFAULT) {
+      default_value = default_value;
+    }
+  }
+
+  // Set check expression. Only applies if CHECK constraint
+  void SetCheck(ExpressionType op, type::Value val) {
+    if (constraint_type == ConstraintType::CHECK) {
+      exp = std::pair<ExpressionType, type::Value>(op, val);
+    }
+  }
+
+  // Get the default value type
+  type::Value GetDefault() const { return default_value; }
+
+  // Get the check expression
+  std::pair<ExpressionType, type::Value> GetCheck() { return check_exp; }
+
   // Get the offset
   oid_t GetForeignKeyListOffset() const { return fk_list_offset; }
 
@@ -53,6 +76,9 @@ class Constraint : public Printable {
 
   // Get a string representation for debugging
   const std::string GetInfo() const;
+
+  // Get the offsets of the columns covered by this constraint
+  std::vector<oid_t> &GetColumnIDs() const { return column_ids; }
 
  private:
   //===--------------------------------------------------------------------===//
@@ -69,6 +95,11 @@ class Constraint : public Printable {
 
   std::string constraint_name;
 
+  std::vector<oid_t> column_ids;
+
+  type::Value *default_value = nullptr;
+
+  std::pair<ExpressionType, type::Value> check_exp;
 };
 
 }  // End catalog namespace

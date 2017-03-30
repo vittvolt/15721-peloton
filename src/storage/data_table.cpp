@@ -143,7 +143,22 @@ bool DataTable::CheckNulls(const storage::Tuple *tuple) const {
 }
 
 bool DataTable::CheckConstraints(const storage::Tuple *tuple) const {
-  // First, check NULL constraints
+  PL_ASSERT(schema->GetColumnCount() == tuple->GetColumnCount());
+  for (auto constraint : schema->constraints) {
+    switch(constraint.GetType()) {
+      case ConstraintType::NOT_NULL:
+      case ConstraintType::NOTNULL:
+      case ConstraintType::PRIMARY:
+      case ConstraintType::UNIQUE:
+      case ConstraintType::FOREIGN:
+      case ConstraintType::CHECK:
+      case ConstraintType::DEFAULT:
+    }
+  }
+
+  return true;
+  
+  /* keep for now for reference
   if (CheckNulls(tuple) == false) {
     LOG_TRACE("Not NULL constraint violated");
     throw ConstraintException("Not NULL constraint violated : " +
@@ -151,6 +166,7 @@ bool DataTable::CheckConstraints(const storage::Tuple *tuple) const {
     return false;
   }
   return true;
+  */
 }
 
 // this function is called when update/delete/insert is performed.
@@ -168,6 +184,12 @@ bool DataTable::CheckConstraints(const storage::Tuple *tuple) const {
 // however, when performing insert, we have to copy data immediately,
 // and the argument cannot be set to nullptr.
 ItemPointer DataTable::GetEmptyTupleSlot(const storage::Tuple *tuple) {
+  assert(tuple);
+  if (!CheckConstraints(tuple)) {
+    LOG_TRACE("Tuple failed constraints check.");
+    return INVALID_ITEMPOINTER;
+  }
+  
   //=============== garbage collection==================
   // check if there are recycled tuple slots
   auto &gc_manager = gc::GCManagerFactory::GetInstance();
@@ -869,12 +891,16 @@ void DataTable::AddForeignKey(catalog::ForeignKey *key) {
   {
     std::lock_guard<std::mutex> lock(data_table_mutex_);
     catalog::Schema *schema = this->GetSchema();
-    catalog::Constraint constraint(ConstraintType::FOREIGN,
-                                   key->GetConstraintName());
-    constraint.SetForeignKeyListOffset(GetForeignKeyCount());
+    std::vector<oid_t> column_offsets;
     for (auto fk_column : key->GetFKColumnNames()) {
-      schema->AddConstraint(fk_column, constraint);
+      oid_t column_id = GetColumnID(fk_column);
+      column_offsets.push_back(column_id);
     }
+    catalog::Constraint constraint(ConstraintType::FOREIGN,
+                                   key->GetConstraintName(),
+                                   column_offsets);
+    constraint.SetForeignKeyListOffset(GetForeignKeyCount());
+    schema->AddConstraint(constraint);
     // TODO :: We need this one..
     catalog::ForeignKey *fk = new catalog::ForeignKey(*key);
     foreign_keys_.push_back(fk);

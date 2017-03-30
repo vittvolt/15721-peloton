@@ -1171,10 +1171,12 @@ std::shared_ptr<const peloton::catalog::Schema> CreateHackJoinSchema() {
                                 type::Type::GetTypeSize(type::Type::INTEGER),
                                 "S_I_ID", 1);
 
-  column.AddConstraint(
-      catalog::Constraint(ConstraintType::NOTNULL, "not_null"));
+  oid_t column_id = schema.GetColumnID(column.GetName());
+  auto constraint = catalog::Constraint(ConstraintType::NOTNULL, "not_null",
+      {0});
+
   return std::shared_ptr<const peloton::catalog::Schema>(
-      new catalog::Schema({column}));
+      new catalog::Schema({column}, {constraint}));
 }
 
 std::unique_ptr<planner::AbstractPlan> SimpleOptimizer::CreateJoinPlan(
