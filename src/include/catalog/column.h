@@ -81,11 +81,15 @@ class Column : public Printable {
 
   inline bool IsPrimary() const { return is_primary_; }
 
+  inline bool IsUnique() const { return is_unique_; }
+
   // Add a constraint to the column
   void AddConstraint(const catalog::Constraint &constraint) {
     constraints.push_back(constraint);
     if (constraint.GetType() == ConstraintType::PRIMARY) {
       is_primary_ = true;
+    } else if (constraint.GetType() == ConstraintType::UNIQUE) {
+      is_unique_ = true;
     }
   }
 
@@ -131,6 +135,9 @@ class Column : public Printable {
 
   // is the column contained the primary key?
   bool is_primary_ = false;
+
+  // is the column required to have a unique value (but is not a primary key)?
+  bool is_unique_ = false;
 
   // offset of column in tuple
   oid_t column_offset = INVALID_OID;

@@ -143,13 +143,69 @@ bool DataTable::CheckNulls(const storage::Tuple *tuple) const {
 }
 
 bool DataTable::CheckConstraints(const storage::Tuple *tuple) const {
-  // First, check NULL constraints
-  if (CheckNulls(tuple) == false) {
-    LOG_TRACE("Not NULL constraint violated");
-    throw ConstraintException("Not NULL constraint violated : " +
+  PL_ASSERT(schema->GetColumnCount() == tuple->GetColumnCount());
+
+  oid_t column_count = schema->GetColumnCount();
+  for (oid_t column_itr = 0; column_itr < column_count; column_itr++) {
+    // Get constraints for this column
+    auto column = schema->GetColumn(column_itr);
+    bool primary, unique, notnull = false;
+    for (auto constraint : column.GetConstraints()) {
+      switch(constraint.GetType()) {
+        case ConstraintType::INVALID:  LOG_DEBUG(
+                                         "Attempted to add INVALID constraint."
+                                       );
+                                       break;
+        case ConstraintType::PRIMARY:  primary = true;
+                                       LOG_DEBUG(
+                                         "Registered a PRIMARY constraint."
+                                       );
+                                       break;
+        case ConstraintType::UNIQUE:   unique = true;
+                                       LOG_DEBUG(
+                                         "Registered a UNIQUE constraint."
+                                       );
+                                       break;
+        case ConstraintType::NOTNULL:
+        case ConstraintType::NOT_NULL: notnull = true;
+                                       LOG_DEBUG(
+                                         "Registered a NOTNULL constraint."
+                                       );
+                                       break;
+        case ConstraintType::FOREIGN:
+        case ConstraintType::DEFAULT:
+        case ConstraintType::CHECK:
+        case ConstraintType::EXCLUSION: break;
+      }
+    }
+
+    // Check NULL constraint
+    if (notnull && tuple->IsNull(column_itr)) {
+      LOG_TRACE(
+          "%u th attribute in the tuple was NULL. It is a non-nullable "
+          "attribute.",
+          column_itr);
+      throw ConstraintException("Not NULL constraint violated : " +
                               std::string(tuple->GetInfo()));
-    return false;
+      return false;
+    }
+
+    // Check Primary Key constraint
+    if (primary) {
+      if (tuple->IsNull(column_itr)) {
+        LOG_TRACE("Primary key constraint violated at attribute %u.",
+            column_itr);
+        throw ConstraintException("PRIMARY KEY constraint violated : " +
+                              std::string(tuple->GetInfo()));
+      }
+    }
+  
+    // Check Unique constraint
+    if (unique) {
+      
+    }
   }
+
   return true;
 }
 
@@ -168,6 +224,10 @@ bool DataTable::CheckConstraints(const storage::Tuple *tuple) const {
 // however, when performing insert, we have to copy data immediately,
 // and the argument cannot be set to nullptr.
 ItemPointer DataTable::GetEmptyTupleSlot(const storage::Tuple *tuple) {
+  // check that no constraints would be violated
+  //TODO: only foreign key constraints need to be checked on DELETE action
+  CheckConstraints(tuple);
+
   //=============== garbage collection==================
   // check if there are recycled tuple slots
   auto &gc_manager = gc::GCManagerFactory::GetInstance();

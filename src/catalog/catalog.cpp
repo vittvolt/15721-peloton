@@ -151,16 +151,27 @@ ResultType Catalog::CreateTable(std::string database_name, std::string table_nam
           DEFAULT_TUPLES_PER_TILEGROUP, own_schema, adapt_table);
       GetDatabaseWithOid(database_id)->AddTable(table);
 
-      // Create the primary key index for that table if there's primary key
+      // Create the primary key index and unique indices if necessary
+      //TODO: this code can only support single column unique constraints
       bool has_primary_key = false;
       auto &schema_columns = table->GetSchema()->GetColumns();
-      for (auto &column : schema_columns)
+      for (auto &column : schema_columns) {
         if (column.IsPrimary()) {
           has_primary_key = true;
-          break;
+        } else if (column.IsUnique()) {
+          std::string col_name = column.GetName();
+          std::vector<std::string> index_attr = {col_name};
+          std::string index_name = table->GetName() + "_" + col_name + "_UNIQ";
+          CreateIndex(database_name, table_name, index_attr, index_name, true, 
+            IndexType::BWTREE);
+          LOG_DEBUG("Added a UNIQUE index on %s in %s.", 
+            col_name.c_str(), table_name.c_str());
         }
-      if (has_primary_key == true)
+      }
+      if (has_primary_key) {
         CreatePrimaryIndex(database_name, table_name);
+        LOG_DEBUG("Added a PRIMARY index on %s.", table_name.c_str());
+      }
 
       // Update catalog_table with this table info
       auto tuple =
