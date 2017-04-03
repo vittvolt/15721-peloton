@@ -152,25 +152,13 @@ bool DataTable::CheckConstraints(const storage::Tuple *tuple) const {
     bool primary, unique, notnull = false;
     for (auto constraint : column.GetConstraints()) {
       switch(constraint.GetType()) {
-        case ConstraintType::INVALID:  LOG_DEBUG(
-                                         "Attempted to add INVALID constraint."
-                                       );
-                                       break;
+        case ConstraintType::INVALID:  break;
         case ConstraintType::PRIMARY:  primary = true;
-                                       LOG_DEBUG(
-                                         "Registered a PRIMARY constraint."
-                                       );
                                        break;
         case ConstraintType::UNIQUE:   unique = true;
-                                       LOG_DEBUG(
-                                         "Registered a UNIQUE constraint."
-                                       );
                                        break;
         case ConstraintType::NOTNULL:
         case ConstraintType::NOT_NULL: notnull = true;
-                                       LOG_DEBUG(
-                                         "Registered a NOTNULL constraint."
-                                       );
                                        break;
         case ConstraintType::FOREIGN:
         case ConstraintType::DEFAULT:
@@ -348,11 +336,8 @@ ItemPointer DataTable::InsertTuple(const storage::Tuple *tuple,
     IncreaseTupleCount(1);
     return location;
   }
-  // Index checks and updates
-  if (InsertInIndexes(tuple, location, transaction, index_entry_ptr) == false) {
-    LOG_TRACE("Index constraint violated");
-    return INVALID_ITEMPOINTER;
-  }
+  // Index checks and updates. Throws an exception if a constraint is violated
+  InsertInIndexes(tuple, location, transaction, index_entry_ptr);
 
   // ForeignKey checks
   if (CheckForeignKeyConstraints(tuple) == false) {
@@ -392,8 +377,8 @@ ItemPointer DataTable::InsertTuple(const storage::Tuple *tuple) {
  * index entries.
  * @warning This still doesn't guarantee serializability.
  *
- * @returns True on success, false if a visible entry exists (in case of
- *primary/unique).
+ * @returns True on success, throws a ConstraintException if visible entry
+ * exists (in case of primary/unique).
  */
 bool DataTable::InsertInIndexes(const storage::Tuple *tuple,
                                 ItemPointer location,
@@ -434,6 +419,7 @@ bool DataTable::InsertInIndexes(const storage::Tuple *tuple,
 
   // Since this is NOT protected by a lock, concurrent insert may happen.
   bool res = true;
+  std::string failure_type = "";
   int success_count = 0;
 
   for (int index_itr = index_count - 1; index_itr >= 0; --index_itr) {
@@ -444,11 +430,15 @@ bool DataTable::InsertInIndexes(const storage::Tuple *tuple,
     key->SetFromTuple(tuple, indexed_columns, index->GetPool());
 
     switch (index->GetIndexType()) {
-      case IndexConstraintType::PRIMARY_KEY:
+      case IndexConstraintType::PRIMARY_KEY: {
+        failure_type = "PRIMARY_KEY";
+        res = index->CondInsertEntry(key.get(), *index_entry_ptr, fn);
+      } break;
       case IndexConstraintType::UNIQUE: {
         // get unique tuple from primary/unique index.
         // if in this index there has been a visible or uncommitted
         // <key, location> pair, this constraint is violated
+        failure_type = "UNIQUE";
         res = index->CondInsertEntry(key.get(), *index_entry_ptr, fn);
       } break;
 
@@ -464,6 +454,9 @@ bool DataTable::InsertInIndexes(const storage::Tuple *tuple,
       // the pointer has a chance to be dereferenced by readers and it cannot be
       // deleted
       *index_entry_ptr = nullptr;
+      LOG_TRACE("Index constraint of type %s violated", failure_type.c_str());
+      throw ConstraintException("Constraint of type " + failure_type +
+        " violated.");
       return false;
     } else {
       success_count += 1;
