@@ -214,7 +214,7 @@ bool DataTable::CheckConstraints(const storage::Tuple *tuple) const {
 ItemPointer DataTable::GetEmptyTupleSlot(const storage::Tuple *tuple) {
   // check that no constraints would be violated
   //TODO: only foreign key constraints need to be checked on DELETE action
-  CheckConstraints(tuple);
+  //CheckConstraints(tuple);
 
   //=============== garbage collection==================
   // check if there are recycled tuple slots
